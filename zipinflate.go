@@ -44,9 +44,9 @@ func NewDReaderInterval(r io.ReadSeeker, indexInterval int64) (*DReader, error) 
 		r:             r,
 		bufR:          bufR,
 		indexInterval: indexInterval,
+		decompressor:  flate.NewReader(bufR),
 	}
 
-	z.decompressor = flate.NewReader(z.bufR)
 	return z, z.err
 }
 
@@ -67,12 +67,8 @@ func (z *DReader) Read(p []byte) (n int, err error) {
 	if z.pos >= z.Index.lastUncompressedOffset()+z.indexInterval {
 		z.addPointToIndex()
 	}
-	if z.err != io.EOF {
-		// In the normal case we return here.
-		return n, z.err
-	}
 
-	return n, io.EOF
+	return n, z.err
 }
 
 func (z *DReader) addPointToIndex() {
@@ -145,6 +141,7 @@ func (z *DReader) seekToPoint(p Point) (position int64, err error) {
 		return -1, z.err
 	}
 	if p.UncompressedOffset == 0 { // Beginning of file.
+		z.decompressor.Close()
 		z.decompressor = flate.NewReader(z.bufR)
 	} else {
 		z.decompressor, z.err = flate.NewReaderState(z.bufR, p.DecompressorState)
